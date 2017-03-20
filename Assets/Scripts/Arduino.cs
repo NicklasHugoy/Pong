@@ -72,7 +72,7 @@ namespace Arduino
 		{
 			serialPort.Write(command, 0, command.Length);
 
-			byte[] task = GetResponse(expectedReturn, 2);
+			byte[] task = GetResponse(expectedReturn, 20);
 
 			if (task != null)
 			{
@@ -90,35 +90,42 @@ namespace Arduino
 
 		private byte[] GetResponse(int expectedReturnSize, float timeout)
 		{
+			List<byte> data = new List<byte>();
 			while (timeout > 0)
 			{
 				timeout -= Time.deltaTime;
-				if (serialPort.BytesToRead >= expectedReturnSize)
+				try
 				{
-					byte[] result = new byte[expectedReturnSize];
-					serialPort.Read(result, 0, expectedReturnSize);
+					int newData = serialPort.ReadByte();
+					if (newData == -1) continue;
+					else data.Add((byte)newData);
+					if (data.Count >= expectedReturnSize)
+					{
+						byte[] result = data.ToArray();
 
 
-					return result;
+						return result;
+					}
+				}
+				catch (Exception e)
+				{
+					continue;
 				}
 			}
 			return null;
 		}
 
-		private byte[] synchResponse(int expectedReturnSize)
-		{
-			while (true)
-			{
-				if (serialPort.BytesToRead >= expectedReturnSize)
-				{
-					byte[] result = new byte[expectedReturnSize];
-					serialPort.Read(result, 0, expectedReturnSize);
+		//private byte[] synchResponse(int expectedReturnSize) {
+		//    while (true) {
+		//        if (serialPort.BytesToRead >= expectedReturnSize) {
+		//            byte[] result = new byte[expectedReturnSize];
+		//            serialPort.Read(result, 0, expectedReturnSize);
 
 
-					return result;
-				}
-			}
-		}
+		//            return result;
+		//        }
+		//    }
+		//}
 
 		private SerialPort CheckPorts()
 		{
@@ -127,13 +134,21 @@ namespace Arduino
 			Debug.Log(ports.Count);
 			foreach (var cPort in ports)
 			{
+				Debug.Log(cPort);
+
 				try
 				{
-					Debug.Log(cPort);
 					SerialPort newPort = new SerialPort(cPort, 9600);
+
+					if (newPort == null)
+					{
+						Debug.Log("NULL");
+					}
+
 					newPort.Open();
 					newPort.DiscardInBuffer();
-					bool check = CheckPort(newPort, 1);
+					newPort.ReadTimeout = 1;
+					bool check = CheckPort(newPort, 100f);
 
 					if (check)
 					{
@@ -147,37 +162,59 @@ namespace Arduino
 				}
 				catch (Exception e)
 				{
-					Debug.Log(cPort + " NOTWORKING");
+					Debug.Log(cPort + " Access denied");
 				}
 			}
 			return null;
 		}
 
-		private bool CheckPort(SerialPort port, float timeout)
+		private bool CheckPort(SerialPort port, float time)
 		{
-				byte[] keyCheck = new byte[4];
-				while (timeout > 0)
+			byte[] keyCheck = new byte[4];
+			float timeout = time;
+			while (timeout > 0)
+			{
+				timeout -= Time.deltaTime;
+				Debug.Log(timeout);
+				if (port.IsOpen)
 				{
-					timeout -= Time.deltaTime;
-					if (port.IsOpen)
+					try
 					{
-						if (port.BytesToRead >= 1)
+						List<byte> data = new List<byte>();
+						while (true)
 						{
-
-							keyCheck = ShiftLeft(keyCheck);
-							keyCheck[3] = (byte)port.BaseStream.ReadByte();
-
-							if (CheckCombo(keyCheck, new byte[] { 153, 53, 85, 231 }))
+							int newData = port.ReadByte();
+							if (newData == -1)
 							{
-								port.BaseStream.WriteByte(197);
-								port.DiscardInBuffer();
-								return true;
+								break;
 							}
+							else {
+								data.Add((byte)newData);
+								if (data.Count > 0)
+								{
+									while (data.Count > 0)
+									{
+										keyCheck = ShiftLeft(keyCheck);
+										keyCheck[3] = data[0];
+										data.RemoveAt(0);
 
+										if (CheckCombo(keyCheck, new byte[] { 153, 53, 85, 231 }))
+										{
+											port.BaseStream.WriteByte(197);
+											port.DiscardInBuffer();
+											return true;
+										}
+									}
+
+								}
+							}
 						}
+
 					}
+					catch (Exception e) { }
 				}
-				return false;
+			}
+			return false;
 		}
 
 		private bool CheckCombo(byte[] data, byte[] wanted)

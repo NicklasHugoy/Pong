@@ -13,4 +13,9 @@ public class GameManager : MonoBehaviour
 		port = new ArduinoPort();
 	}
 
+	void OnApplicationQuit()
+	{
+		port.Dispose();
+	}
+
 }
