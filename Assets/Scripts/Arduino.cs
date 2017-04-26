@@ -11,6 +11,7 @@ namespace Arduino
 
 	public enum PinModes
 	{
+		NONE = -1,
 		INPUT = 0,
 		OUPUT = 1,
 		INPUT_PULLUP = 2
@@ -18,11 +19,20 @@ namespace Arduino
 
 	public class ArduinoPort : IDisposable
 	{
+		public Pin[] pins = new Pin[20];
 
 		public SerialPort serialPort;
 
 		public ArduinoPort()
 		{
+			int[] pwmPins = new int[6] { 3, 5, 6, 9, 10, 11 };
+			for (int i = 0; i < 20; i++)
+			{
+
+				pins[i] = new Pin(i, i > 13, pwmPins.Contains(i));
+				pins[i].arduino = this;
+			}
+
 			serialPort = CheckPorts();
 		}
 
@@ -40,6 +50,30 @@ namespace Arduino
 				Send(new byte[] { (byte)pin, 0 });
 			}
 		}
+
+		public void WriteSevenSeg(int startPin, int digit)
+		{
+			if (digit >= 0 && digit < 10)
+			{
+				Send(new byte[] { 21, (byte)startPin, (byte)digit });
+			}
+		}
+
+		public void LEDSetColor(int LEDPos, Color32 LEDColor)
+		{
+			Send(new byte[] { (byte)(LEDPos + 22), LEDColor.r, LEDColor.g, LEDColor.b });
+		}
+
+		public void LEDFillColor(Color32 LEDColor)
+		{
+			Send(new byte[] {30, LEDColor.r, LEDColor.g, LEDColor.b });
+		}
+
+		public void LEDShow()
+		{
+			Send(new byte[] {31});
+		}
+
 		/// <summary>
 		/// Pin 2~13
 		/// 14~19 = A0~A5
@@ -56,7 +90,14 @@ namespace Arduino
 		public short GetAnalogPin(int pin)
 		{
 			byte[] response = Send(new byte[] { (byte)pin, 3 }, 2);
-			return BitConverter.ToInt16(response, 0);
+			if (response.Length > 0)
+			{
+				return BitConverter.ToInt16(response, 0);
+			}
+			else
+			{
+				return 0;
+			}
 		}
 		/// <summary>
 		/// Pin 2~13
@@ -65,6 +106,10 @@ namespace Arduino
 		/// </summary>
 		public bool PinMode(int pin, PinModes pinMode)
 		{
+			pins[pin].OverridePinMode(pinMode);
+			if (pinMode == PinModes.NONE)
+				return true;
+			Console.WriteLine(pinMode + "   " + (int)pinMode);
 			return Send(new byte[] { (byte)pin, 4, (byte)pinMode }, 1)[0] == 1;
 		}
 
@@ -175,7 +220,6 @@ namespace Arduino
 			while (timeout > 0)
 			{
 				timeout -= Time.deltaTime;
-				Debug.Log(timeout);
 				if (port.IsOpen)
 				{
 					try
@@ -252,6 +296,63 @@ namespace Arduino
 				Debug.Log("Arduino did not accept shutdown procedure");
 			}
 			serialPort.Close();
+		}
+	}
+
+	public class Pin
+	{
+		public ArduinoPort arduino;
+		private PinModes mode = PinModes.NONE;
+
+		public readonly int pinNumber;
+		public PinModes pinMode
+		{
+			set
+			{
+				arduino.PinMode(pinNumber, value);
+			}
+			get
+			{
+				return mode;
+			}
+		}
+		public bool state
+		{
+			get
+			{
+				return arduino.GetPin(pinNumber);
+			}
+			set
+			{
+				arduino.SetPin(pinNumber, value);
+			}
+		}
+		public readonly bool isAnalog;
+		public readonly bool isPWM;
+
+		public Pin(int number, bool analog, bool pwm)
+		{
+			pinNumber = number;
+			isAnalog = analog;
+			isPWM = pwm;
+		}
+
+		public void OverridePinMode(PinModes newMode)
+		{
+			mode = newMode;
+		}
+
+		public override string ToString()
+		{
+			if (isAnalog)
+			{
+				return "Pin " + pinNumber + " is analog with pinMode " + mode.ToString();
+			}
+			else {
+				string supportsPWM = isPWM ? "and supports PWM " : "and is not PWM ";
+
+				return "Pin " + pinNumber + " is digital " + supportsPWM + "with pinMode " + mode.ToString();
+			}
 		}
 	}
 }

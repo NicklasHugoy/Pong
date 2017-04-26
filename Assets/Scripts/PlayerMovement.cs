@@ -1,6 +1,5 @@
 ﻿using System.Collections;
 using System.Collections.Generic;
-using UnityEditor.VersionControl;
 using UnityEngine;
 
 public class PlayerMovement : MonoBehaviour {
@@ -10,10 +9,19 @@ public class PlayerMovement : MonoBehaviour {
 	[SerializeField]
 	private int pin;
 
+	public bool isInverted;
+
 	// Update is called once per frame
 	void Update ()
 	{
-
-		transform.position =  new Vector2(transform.position.x, Mathf.Lerp(5,-5, GameManager.port.GetAnalogPin(pin)/1023f));
+		if (isInverted)
+		{
+			transform.position = new Vector2(transform.position.x, Mathf.Lerp(-5, 5, GameManager.port.GetAnalogPin(pin) / 1023f));
+		}
+		else
+		{
+			transform.position = new Vector2(transform.position.x, Mathf.Lerp(5, -5, GameManager.port.GetAnalogPin(pin) / 1023f));
+		}
+		
 	}
 }
